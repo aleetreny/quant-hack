@@ -1,36 +1,113 @@
-import math
-
-# Round 1: rewards ~ Exponential(mean 10), every team that accepts gets the full reward,
-# so other teams cannot change our score. Pure optimal stopping with lockout:
-#   with s turns left (incl. this one), accept iff reward >= V(s-1) - V(s-G), G = lockout + 1
-#   V(s) = V(s-1) + MEAN * exp(-cutoff(s) / MEAN)
-
-MEAN = 10.0
-
-_cache = {}
+import bisect
 
 
-def _cutoffs(T, G):
-    key = (T, G)
-    c = _cache.get(key)
-    if c is None:
-        V = [0.0] * (T + 1)
-        c = [0.0] * (T + 1)
-        for s in range(1, T + 1):
-            cs = V[s - 1] - (V[s - G] if s >= G else 0.0)
-            c[s] = cs
-            V[s] = V[s - 1] + MEAN * math.exp(-cs / MEAN)
-        _cache[key] = c
-    return c
+class Solution:
+    def __init__(self):
+        self.history = []
+        self.values = [0.0]
+        self.thresholds = [0.0]
 
+        self.cached_T = None
+        self.cached_lockout = None
+        self.last_update = 0
 
-def play(reward, lockout, t, T, your_score, other_scores, is_locked):
-    try:
-        if is_locked or reward <= 0:
+        self.update_interval = 20
+        self.min_samples = 30
+
+    def expected_excess(self, threshold, samples, prefix):
+        """Estimate E[max(X - threshold, 0)]."""
+
+        n = len(samples)
+
+        if n == 0:
+            return 0.0
+
+        idx = bisect.bisect_right(samples, threshold)
+        count = n - idx
+
+        if count == 0:
+            return 0.0
+
+        total = prefix[n] - prefix[idx]
+
+        return max(0.0, (total - count * threshold) / n)
+
+    def compute_values(self, T, lockout):
+        """Compute optimal thresholds from observed rewards."""
+
+        samples = sorted(self.history)
+        prefix = [0.0]
+
+        for x in samples:
+            prefix.append(prefix[-1] + x)
+
+        self.values = [0.0]
+        self.thresholds = [0.0]
+
+        for n in range(1, T + 1):
+            skip_value = self.values[n - 1]
+
+            future_index = max(0, n - lockout - 1)
+            accept_future = self.values[future_index]
+
+            threshold = skip_value - accept_future
+
+            expected_gain = self.expected_excess(
+                threshold, samples, prefix
+            )
+
+            self.values.append(skip_value + expected_gain)
+            self.thresholds.append(threshold)
+
+        self.cached_T = T
+        self.cached_lockout = lockout
+        self.last_update = len(self.history)
+
+    def play(
+        self,
+        reward: float,
+        lockout: int,
+        t: int,
+        T: int,
+        your_score: float,
+        other_scores: list[tuple[float, bool]],
+        is_locked: bool
+    ) -> bool:
+
+        # Observe every reward, including locked rounds
+        self.history.append(reward)
+
+        if is_locked:
             return False
-        T = max(int(T), 1)
-        G = max(int(lockout), 0) + 1
-        s = min(max(T - int(t) + 1, 1), T)
-        return bool(reward >= _cutoffs(T, G)[s])
-    except Exception:
-        return bool(not is_locked and reward > 20.0)
+
+        remaining = T - t + 1
+
+        # Cold-start phase
+        if len(self.history) < self.min_samples:
+
+            if remaining <= lockout + 1:
+                return reward > 0
+
+            if len(self.history) < 5:
+                return False
+
+            mean_reward = sum(self.history) / len(self.history)
+
+            return reward > 1.5 * mean_reward
+
+        # Update empirical dynamic programming
+        needs_update = (
+            self.cached_T != T
+            or self.cached_lockout != lockout
+            or len(self.history) - self.last_update >= self.update_interval
+        )
+
+        if needs_update:
+            self.compute_values(T, lockout)
+
+        threshold = self.thresholds[remaining]
+
+        return reward > threshold
+
+
+play = Solution().play
