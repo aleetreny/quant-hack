@@ -67,3 +67,10 @@ Your password is set on your first submission. All future submissions for that t
 | `your_score` | `float` | Your cumulative score so far at round $t-1$ |
 | `other_scores` | `list[tuple[float, bool]]` | List of `(score, is_locked)` tuples for other teams at round $t-1$ (empty `[]` on round 1) |
 | `is_locked` | `bool` | Whether you are currently locked out this round |
+
+## Submission tracking
+
+Submit with `uv run python submit_tracked.py -m "what changed"` instead of `submit.py`. Each submission gets an id (`sub-001`, `sub-002`, ...), a git tag on the submitted commit, a snapshot in `submissions/`, and a row in `submissions/log.csv`.
+
+- Compare two submissions: `git diff sub-001 sub-002 -- solution.py`
+- Restore an old one: `git checkout sub-001 -- solution.py`
