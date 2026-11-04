@@ -72,7 +72,7 @@ def _run_game(args):
         if a and not locked:
             score += r
             lu = t + LOCK
-    return score, time.perf_counter() - t0
+    return score, time.perf_counter() - t0, float(opp_s[0, -1])
 
 
 def e_max(scores, n):
@@ -90,7 +90,16 @@ def evaluate(path, games=4000, seed=0, procs=None):
         res = p.map(_run_game, [(src, path, seed, g) for g in range(games)], chunksize=8)
     sc = np.array([r[0] for r in res])
     tm = np.array([r[1] for r in res])
+    evaluate.ev = np.array([r[2] for r in res])
     return sc, tm
+
+
+def win_best_of(sc, ev, n, reps=20000, seed=1):
+    """Paired: P(our best of n runs > EV-DP team's best of the same n runs), ties count half."""
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(sc), size=(reps, n))
+    a, b = sc[idx].max(1), ev[idx].max(1)
+    return float((a > b + 1e-9).mean() + 0.5 * (np.abs(a - b) <= 1e-9).mean())
 
 
 def main():
@@ -108,6 +117,8 @@ def main():
     print(f"mean={sc.mean():.2f} (se {se:.2f})  std={sc.std():.1f}  median={np.median(sc):.1f}")
     print(f"P>={a.target:.0f}={p:.4f} (se {math.sqrt(p*(1-p)/len(sc)):.4f})  P>=2700={(sc>=2700).mean():.4f}  P>=2800={(sc>=2800).mean():.4f}")
     print("E[max of n]: " + "  ".join(f"n={n}:{e_max(sc, n):.1f}" for n in (3, 5, 10, 20)))
+    ev = evaluate.ev
+    print("P(our best-of-n > EV-DP best-of-n, same rewards): " + "  ".join(f"n={n}:{win_best_of(sc, ev, n):.3f}" for n in (1, 5, 10, 20)))
     print(f"max game time={tm.max():.2f}s  mean={tm.mean():.3f}s")
 
 
