@@ -6,7 +6,7 @@ worth 15 rounds of waiting.
 
 | Round | Rewards | Rules | Ranked on | Our script | Result |
 |---|---|---|---|---|---|
-| 1 | Exponential, mean 10 (announced) | Every accepter is paid | Best score | [`strategies/round1_exponential.py`](strategies/round1_exponential.py) | Best score 2862.17 |
+| 1 | Exponential, mean 10 (announced) | Every accepter is paid | Best score | [`strategies/round1_exponential.py`](strategies/round1_exponential.py) | Best score 2862.17 (2nd) |
 | 2 | Hidden distribution | Every accepter is paid | Best score | [`strategies/round2_hidden_distribution.py`](strategies/round2_hidden_distribution.py) | Best score 134.69 (6th) |
 | 3 | Exponential, mean 10 | Exclusive claim: two or more accepters are paid nothing | Latest score | [`strategies/round3_exclusive_claim.py`](strategies/round3_exclusive_claim.py) | 298.93, **1st** |
 
