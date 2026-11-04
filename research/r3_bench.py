@@ -23,7 +23,7 @@ BASE = {
 }
 
 SETS = {
-    "claude": {"cand": cand(), "band9_16": BASE["band9_16"], "band9_16p75": ("bot", "band", {"lo": 9, "hi": 16, "p": 0.75}),
+    "herd": {"cand": cand(), "band9_16": BASE["band9_16"], "band9_16p75": ("bot", "band", {"lo": 9, "hi": 16, "p": 0.75}),
                "dp1": BASE["dp1"]},
     "base": dict(cand=cand(), **BASE),
 }

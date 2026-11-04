@@ -142,20 +142,20 @@ uv run python research/r3_bench.py '{"cand":{}}' 16 shuffle all 0   # pre-action
 Timing: 0.05-0.13 ms per call on average with 23 rivals (limit 15 ms), worst call < 1 ms after
 warm-up; full game < 0.3 s.
 
-## Claude/ETH-style fields (final candidate, 16 games per field, shuffled order, post flags)
+## ETH-debrief-style fields (final candidate, 16 games per field, shuffled order, post flags)
 
 Rivals: band 9-16 / 8-16 claiming with p=0.75, `rps` = contrarian `r * P(solo) >= 8` with p=0.75 and
 random backoff (order-free lock counts), copies of the candidate, round-1 DP cutters (~20), greedy.
-`claude_band` = 8 band9-16 p.75 + 4 band8-16 p.75 + 4 rps + 4 DP + 3 greedy; `band_sat` = 15 band
-9-16 + 8 DP; `claude_rps` = 12 rps + 5 band + 3 candidate copies + 3 DP; `claude_mix` = 6 candidate
+`herd_band` = 8 band9-16 p.75 + 4 band8-16 p.75 + 4 rps + 4 DP + 3 greedy; `band_sat` = 15 band
+9-16 + 8 DP; `herd_rps` = 12 rps + 5 band + 3 candidate copies + 3 DP; `herd_mix` = 6 candidate
 copies + 6 band + 6 rps + 5 DP.
 
 | field | candidate | band 9-16 | band 9-16 p=0.75 | round-1 DP |
 |---|---|---|---|---|
-| claude_band | 763 (p10 622, rank 1.1) | 1 (0) | 65 (24) | 2 (0) |
+| herd_band | 763 (p10 622, rank 1.1) | 1 (0) | 65 (24) | 2 (0) |
 | band_sat | 1644 (p10 1508, rank 1.0) | 0 (0) | 142 (88) | 1 (0) |
-| claude_rps | 420 (p10 349, rank 2.4) | 0 (0) | 104 (56) | 0 (0) |
-| claude_mix | 362 (p10 287, rank 4.7) | 0 (0) | 54 (23) | 0 (0) |
+| herd_rps | 420 (p10 349, rank 2.4) | 0 (0) | 104 (56) | 0 (0) |
+| herd_mix | 362 (p10 287, rank 4.7) | 0 (0) | 54 (23) | 0 (0) |
 | public_band | 1260 (p10 1129, rank 1.0) | 0 (0) | 294 (231) | 1 (0) |
 | self8 | 414 (p10 339, rank 4.6) | 0 (0) | 81 (54) | 0 (0) |
 | dp1_wall | 2061 (p10 1915, rank 1.0) | 1221 (1193) | 1134 (1099) | 0 (0) |

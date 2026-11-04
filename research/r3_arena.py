@@ -303,12 +303,12 @@ def fields():
     B75 = ("bot", "band", {"lo": 9, "hi": 16, "p": 0.75})
     B816 = ("bot", "band", {"lo": 8, "hi": 16, "p": 0.75})
     RPS = ("bot", "rps")
-    F["claude_band"] = (_rep(8, "band9_16p75", B75) + _rep(4, "band8_16p75", B816) + _rep(4, "rps", RPS) +
+    F["herd_band"] = (_rep(8, "band9_16p75", B75) + _rep(4, "band8_16p75", B816) + _rep(4, "rps", RPS) +
                         _rep(4, "dp1", DP1) + _rep(3, "greedy", ("bot", "greedy")))
     F["band_sat"] = (_rep(8, "band9_16", ("bot", "band", {"lo": 9, "hi": 16})) + _rep(7, "band9_16p75", B75) +
                      _rep(8, "dp1", DP1))
-    F["claude_rps"] = _rep(12, "rps", RPS) + _rep(5, "band9_16p75", B75) + _rep(3, "SELF", "SELF") + _rep(3, "dp1", DP1)
-    F["claude_mix"] = _rep(6, "SELF", "SELF") + _rep(6, "band9_16p75", B75) + _rep(6, "rps", RPS) + _rep(5, "dp1", DP1)
+    F["herd_rps"] = _rep(12, "rps", RPS) + _rep(5, "band9_16p75", B75) + _rep(3, "SELF", "SELF") + _rep(3, "dp1", DP1)
+    F["herd_mix"] = _rep(6, "SELF", "SELF") + _rep(6, "band9_16p75", B75) + _rep(6, "rps", RPS) + _rep(5, "dp1", DP1)
     F["self24"] = _rep(23, "SELF", "SELF")
     F["self12_bandit"] = _rep(11, "SELF", "SELF") + _rep(6, "bandit", ("bot", "bandit")) + _rep(6, "follow", ("bot", "follow"))
     return F
