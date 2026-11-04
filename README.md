@@ -70,7 +70,7 @@ Your password is set on your first submission. All future submissions for that t
 
 ## Submission tracking
 
-Submit with `uv run python submit_tracked.py -m "what changed"` instead of `submit.py`. Each submission gets an id (`sub-001`, `sub-002`, ...), a git tag on the submitted commit, a snapshot in `submissions/`, and a row in `submissions/log.csv`.
+Submit with `uv run python submit_tracked.py -n "Mateo N" -m "what changed"` instead of `submit.py`. Each submission gets an id (`sub-001`, `sub-002`, ...) and a name (`Mateo 1`, `Mateo 2`, ...), git tags for both (`sub-001`, `mateo-1`) on the submitted commit, a snapshot in `submissions/`, and a row in `submissions/log.csv`.
 
-- Compare two submissions: `git diff sub-001 sub-002 -- solution.py`
-- Restore an old one: `git checkout sub-001 -- solution.py`
+- Compare two submissions: `git diff mateo-1 mateo-2 -- solution.py`
+- Restore an old one: `git checkout mateo-1 -- solution.py`

@@ -1,22 +1,24 @@
 """Submit solution.py and record the submission.
 
 Usage:
-    uv run python submit_tracked.py -m "short description of what changed"
+    uv run python submit_tracked.py -n "Mateo 3" -m "short description of what changed"
 
 Each successful submission gets an id (sub-001, sub-002, ...) and:
   - solution.py is committed if it has uncommitted changes
   - a snapshot is saved to submissions/sub-NNN.py
   - a row is appended to submissions/log.csv
-  - an annotated git tag sub-NNN is created on the submitted commit
+  - an annotated git tag sub-NNN is created on the submitted commit,
+    plus an alias tag from the name (e.g. "Mateo 3" -> mateo-3)
   - main and the tag are pushed (skip with --no-push)
 
-Compare two submissions:   git diff sub-001 sub-002 -- solution.py
-Restore an old one:        git checkout sub-001 -- solution.py
+Compare two submissions:   git diff mateo-1 mateo-2 -- solution.py
+Restore an old one:        git checkout mateo-1 -- solution.py
 """
 import argparse
 import csv
 import datetime
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,7 +29,7 @@ from gr_tradinggame.coding.client import Client
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SUB_DIR = os.path.join(ROOT, "submissions")
 LOG = os.path.join(SUB_DIR, "log.csv")
-FIELDS = ["id", "time", "commit", "description"]
+FIELDS = ["id", "name", "time", "commit", "description"]
 
 
 def git(*args):
@@ -39,8 +41,13 @@ def next_id():
     return f"sub-{max(nums, default=0) + 1:03d}"
 
 
+def slug(name):
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument("-n", "--name", required=True, help='human name for this submission, e.g. "Mateo 3"')
     p.add_argument("-m", "--message", required=True, help="what this submission changes")
     p.add_argument("--no-push", action="store_true")
     args = p.parse_args()
@@ -49,6 +56,9 @@ def main():
         sys.exit("ERROR: Edit config.py with your team name, password, and server")
 
     sub_id = next_id()
+    alias = slug(args.name)
+    if git("tag", "-l", alias):
+        sys.exit(f"ERROR: tag {alias} already exists; pick another name")
     source = open(os.path.join(ROOT, "solution.py")).read()
 
     # Run local tests before touching git, so a failing solution leaves no trace.
@@ -59,7 +69,7 @@ def main():
 
     if git("status", "--porcelain", "solution.py"):
         git("add", "solution.py")
-        git("commit", "-m", f"{sub_id}: {args.message}")
+        git("commit", "-m", f"{args.name} ({sub_id}): {args.message}")
     commit = git("rev-parse", "--short", "HEAD")
 
     client.submit(source)  # raises on failure
@@ -72,17 +82,18 @@ def main():
         w = csv.DictWriter(f, fieldnames=FIELDS)
         if new_log:
             w.writeheader()
-        w.writerow({"id": sub_id, "time": now, "commit": commit, "description": args.message})
+        w.writerow({"id": sub_id, "name": args.name, "time": now, "commit": commit, "description": args.message})
 
-    git("tag", "-a", sub_id, commit, "-m", f"{now} {args.message}")
+    git("tag", "-a", sub_id, commit, "-m", f"{args.name} {now} {args.message}")
+    git("tag", "-a", alias, commit, "-m", f"{sub_id} {now} {args.message}")
     git("add", "submissions")
-    git("commit", "-m", f"Record {sub_id}")
+    git("commit", "-m", f"Record {args.name} ({sub_id})")
 
     if not args.no_push:
         git("push", "origin", "HEAD")
-        git("push", "origin", sub_id)
+        git("push", "origin", sub_id, alias)
 
-    print(f"Recorded {sub_id} (commit {commit}): {args.message}")
+    print(f"Recorded {args.name} = {sub_id} (commit {commit}): {args.message}")
 
 
 if __name__ == "__main__":

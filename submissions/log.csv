@@ -1,2 +1,2 @@
-id,time,commit,description
-sub-001,2026-11-04T18:33:56,b2f9649,"DP threshold, assumes Exp(mean 10) rewards, lockout fixed from first call"
+id,name,time,commit,description
+sub-001,Mateo 1,2026-11-04T18:33:56,b2f9649,"DP threshold, assumes Exp(mean 10) rewards, lockout fixed from first call"
