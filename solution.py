@@ -1,80 +1,36 @@
 import math
 
+# Round 1: rewards ~ Exponential(mean 10), every team that accepts gets the full reward,
+# so other teams cannot change our score. Pure optimal stopping with lockout:
+#   with s turns left (incl. this one), accept iff reward >= V(s-1) - V(s-G), G = lockout + 1
+#   V(s) = V(s-1) + MEAN * exp(-cutoff(s) / MEAN)
 
-class Solution:
-    def __init__(self):
-        self.history = []
-        self.values = [0.0]
-        self.cached_lockout = None
+MEAN = 10.0
 
-    def compute_values(self, T, lockout):
-        """Calculate optimal expected future rewards."""
+_cache = {}
 
-        self.values = [0.0]
 
-        for n in range(1, T + 1):
-            skip = self.values[n - 1]
-            accept_future = self.values[max(0, n - lockout - 1)]
+def _cutoffs(T, G):
+    key = (T, G)
+    c = _cache.get(key)
+    if c is None:
+        V = [0.0] * (T + 1)
+        c = [0.0] * (T + 1)
+        for s in range(1, T + 1):
+            cs = V[s - 1] - (V[s - G] if s >= G else 0.0)
+            c[s] = cs
+            V[s] = V[s - 1] + MEAN * math.exp(-cs / MEAN)
+        _cache[key] = c
+    return c
 
-            threshold = skip - accept_future
 
-            expected_gain = 10.0 * math.exp(-threshold / 10.0)
-
-            self.values.append(skip + expected_gain)
-
-        self.cached_lockout = lockout
-
-    def play(
-        self,
-        reward: float,
-        lockout: int,
-        t: int,
-        T: int,
-        your_score: float,
-        other_scores: list[tuple[float, bool]],
-        is_locked: bool
-    ) -> bool:
-
-        self.history.append(reward)
-
-        if is_locked:
+def play(reward, lockout, t, T, your_score, other_scores, is_locked):
+    try:
+        if is_locked or reward <= 0:
             return False
-
-        if self.cached_lockout != lockout or len(self.values) <= T:
-            self.compute_values(T, lockout)
-
-        remaining = T - t + 1
-
-        skip_value = self.values[max(0, remaining - 1)]
-        accept_future = self.values[max(0, remaining - lockout - 1)]
-
-        threshold = skip_value - accept_future
-
-        # Competitive adjustment
-        if other_scores and t > 200:
-
-            leader_score = max(score for score, _ in other_scores)
-            score_gap = leader_score - your_score
-
-            # Estimate the expected remaining score
-            expected_remaining = self.values[remaining]
-
-            # Adjust aggressiveness based on relative position
-            relative_gap = score_gap / max(expected_remaining, 1.0)
-
-            if relative_gap > 0.15:
-                # Significantly behind: increase selectivity
-                threshold *= 1.12
-
-            elif relative_gap > 0.05:
-                # Slightly behind
-                threshold *= 1.06
-
-            elif relative_gap < -0.10:
-                # Comfortably ahead: stay closer to optimal
-                threshold *= 1.00
-
-        return reward > threshold
-
-
-play = Solution().play
+        T = max(int(T), 1)
+        G = max(int(lockout), 0) + 1
+        s = min(max(T - int(t) + 1, 1), T)
+        return bool(reward >= _cutoffs(T, G)[s])
+    except Exception:
+        return bool(not is_locked and reward > 20.0)
