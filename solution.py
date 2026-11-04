@@ -23,8 +23,17 @@ from bisect import bisect_left, insort
 
 import numpy as np
 
-MODE = "auto"      # "exp" (rounds 1, 3), "empirical" (round 2), or "auto"
-EXP_MEAN = None    # set to the announced exponential mean if known, else estimated online
+MODE = "normal"    # "exp" (rounds 1, 3), "normal" (round 2), "empirical", or "auto"
+NORMAL = (-0.2, 1.0)  # round 2 prior: public engine draw "b" = normal(-0.2, 1); checked in game,
+                      # falls back to the empirical DP if the data disagrees
+EXP_MEAN = 10.0    # announced exponential mean (round 1); ignored if the data clearly disagrees
+AUTO_WORLD = True  # pick per game: a negative reward -> NORMAL world, a reward > 8 -> exponential
+KAPPA_EXP = 1.03   # KAPPA used in the exponential world (round 1 setting)
+TARGET = None      # best-score rounds: maximise P(score > TARGET) instead of E[score]; None = EV-DP
+KAPPA = 1.07      # threshold multiplier on the EV-DP rule (standard rules); 1.0 = exact EV-DP.
+                  # Slightly off the clones: scores stay correlated, so we beat their record run
+                  # about half the time instead of always tying (research/decide_now.py)
+TARGET_H = 1.0     # score grid step of the target table
 WARMUP = 8         # rounds observed before the first possible accept when the mean is unknown
 REFIT_EVERY = 50   # rounds between DP refits (also refit when inputs move materially)
 GRID = 256         # quantile grid size for the contention-aware DP
@@ -41,6 +50,50 @@ def _w_exp_closed_form(N, L):
         acc = W[n - 1 - L] if n - 1 - L > 0 else 0.0
         W[n] = W[n - 1] + math.exp(-(W[n - 1] - acc))
     return W
+
+
+def _target_table(N, L, mu, B, h, block=400):
+    # W[n, i] = P(gain >= i*h with n rounds left) under the policy maximising that probability,
+    # Exponential(mu) rewards rounded to the grid. Memoryless tail: sum_{j>=j*} p_j A(i-j) = c rho^j* H(i-j*)
+    D = int(math.ceil(B / h)) + 1
+    rho = math.exp(-h / mu)
+    c0 = (1 - rho) / math.sqrt(rho)
+    p0 = 1 - math.sqrt(rho)
+    W = np.zeros((N + 1, D + 1), np.float32)
+    W[0, 0] = 1.0
+    idx = np.arange(D + 1)
+    for n in range(1, N + 1):
+        S = W[n - 1].astype(np.float64)
+        A = W[max(n - 1 - L, 0)].astype(np.float64)
+        H = np.empty(D + 1)
+        prev = 1.0 / (1 - rho)
+        for s in range(0, D + 1, block):
+            a = A[s:s + block]
+            k = np.arange(len(a), dtype=float)
+            pw = rho ** (-k)
+            H[s:s + block] = rho ** (k + 1) * prev + np.cumsum(a * pw) / pw
+            prev = H[s + len(a) - 1]
+        Hm = np.concatenate(([1.0 / (1 - rho)], H))
+        cnt = np.searchsorted(-A, -S, side="left")
+        jstar = np.maximum(idx - (cnt - 1), 0)
+        tail_p = np.where(jstar >= 1, rho ** (jstar - 0.5), 1.0)
+        tail_v = np.where(jstar >= 1, c0 * rho ** jstar * Hm[np.clip(idx - jstar + 1, 0, D + 1)],
+                          p0 * A + c0 * rho * Hm[idx])
+        Wn = S * (1 - tail_p) + tail_v
+        Wn[0] = 1.0
+        W[n] = np.minimum(Wn, 1.0)
+    return W
+
+
+def _v_normal(N, L, m, s):
+    # Known normal, never taking a non-positive reward: E[(r - c)+] with c floored at 0
+    V = [0.0] * (N + 1)
+    for n in range(1, N + 1):
+        acc = V[n - 1 - L] if n - 1 - L > 0 else 0.0
+        c = max(V[n - 1] - acc, 0.0)
+        z = (c - m) / s
+        V[n] = V[n - 1] + s * math.exp(-0.5 * z * z) / math.sqrt(2 * math.pi) + (m - c) * 0.5 * math.erfc(z / math.sqrt(2))
+    return V
 
 
 def _v_sorted(N, L, r_sorted):
@@ -72,7 +125,31 @@ def _v_grid(N, L, r, q, lf):
 class Solution:
     def __init__(self):
         self._w_cache = {}
+        self._t_cache = {}
         self._reset(None, None)
+
+    def _target_accept(self, reward, n, t, score):
+        """True/False from the target table, or None to defer to the EV rule."""
+        if TARGET is None or EXP_MEAN is None or self.contention or self.mode != "exp":
+            return None
+        key = (self.T, self.L, float(EXP_MEAN), float(TARGET), TARGET_H)
+        W = self._t_cache.get(key)
+        if W is None:
+            if t > 2 or self.T > 5000:
+                return None  # only build at the start of a real game
+            W = _target_table(self.T, self.L, float(EXP_MEAN), float(TARGET), TARGET_H)
+            self._t_cache = {key: W}
+        D = W.shape[1] - 1
+        d = TARGET - score
+        i = int(round(d / TARGET_H))
+        if i <= 0 or i > D:
+            return None
+        sv = float(W[n - 1, i])
+        ia = int(round((d - reward) / TARGET_H))
+        av = 1.0 if ia <= 0 else float(W[max(n - 1 - self.L, 0), min(ia, D)])
+        if max(av, sv) <= 1e-9:
+            return None  # target out of reach: play for expected value
+        return av > sv + 1e-12
 
     # ------------------------------------------------------------------ state
     def _reset(self, T, L):
@@ -82,6 +159,7 @@ class Solution:
         self.sorted_rw = []
         self.sum_rw = 0.0
         self.mode = MODE if MODE != "auto" else "exp"
+        self.world = None if AUTO_WORLD else self.mode
         self.ks_checked_at = 0
         self.V = None
         self.V_key = None
@@ -115,13 +193,32 @@ class Solution:
 
     # --------------------------------------------------------- distribution
     def _mu(self):
-        if EXP_MEAN is not None:
-            return float(EXP_MEAN)
         n = len(self.sorted_rw)
+        if EXP_MEAN is not None:
+            if n >= 50 and abs(self.sum_rw / n - EXP_MEAN) > 4 * EXP_MEAN / math.sqrt(n):
+                return self.sum_rw / n
+            return float(EXP_MEAN)
         return self.sum_rw / n if n else 1.0
 
     def _maybe_ks(self):
         n = len(self.sorted_rw)
+        if MODE == "normal":
+            if self.mode != "normal" or n < 100 or n - self.ks_checked_at < 50:
+                return
+            self.ks_checked_at = n
+            m0, s0 = NORMAL
+            mean = self.sum_rw / n
+            x = np.asarray(self.sorted_rw)
+            sd = float(x.std())
+            z = (x - m0) / (s0 * math.sqrt(2))
+            cdf = 0.5 * (1.0 + np.array([math.erf(v) for v in z]))
+            i = np.arange(1, n + 1)
+            d = max(np.max(i / n - cdf), np.max(cdf - (i - 1) / n))
+            # repeated every 50 rounds, so strict: KS ~0.1% (1.95 / sqrt(n)), mean within 5 se, sd within 20%
+            if (d * math.sqrt(n) > 1.95 or abs(mean - m0) > 5 * s0 / math.sqrt(n)
+                    or not 0.8 <= sd / s0 <= 1.2):
+                self.mode = "empirical"
+            return
         if MODE != "auto" or n < 20 or n - self.ks_checked_at < (10 if n < 300 else 50):
             return
         self.ks_checked_at = n
@@ -276,6 +373,13 @@ class Solution:
             r = self._grid()
             q = self._q_of_r(r, self.F_avg or 0.0, marginal=True)
             self.V = _v_grid(N, L, r, q, lf)
+        elif self.mode == "normal":
+            key = ("normal", L, NORMAL)
+            W = self._w_cache.get(key)
+            if W is None or len(W) < N + 1:
+                W = _v_normal(max(N, self.T or N), L, *NORMAL)
+                self._w_cache[key] = W
+            self.V = W
         elif self.mode == "exp":
             key = (L,)
             W = self._w_cache.get(key)
@@ -311,14 +415,28 @@ class Solution:
         insort(self.sorted_rw, reward)
         self.sum_rw += reward
         self.rw.pop(t - 6, None)
+        if self.world is None:
+            n_seen = len(self.sorted_rw)
+            mean_seen = self.sum_rw / n_seen
+            if reward < 0:
+                self.world = "normal"
+            elif reward > 8 and mean_seen > 3:
+                self.world = "exp"
+                self.mode = "exp"
+            elif n_seen >= 10:
+                # no negative reward and no exponential-sized values: learn the distribution
+                self.world = "empirical"
+                self.mode = "empirical"
         self._maybe_ks()
 
         if is_locked or t > T:
             return False
+        if self.world is None and T - t + 1 > self.L + 1:
+            return False
         n = T - t + 1
         if self.L <= 0:
             return reward > 0
-        if EXP_MEAN is None and t <= WARMUP and n > self.L + 1:
+        if EXP_MEAN is None and self.mode != "normal" and t <= WARMUP and n > self.L + 1:
             return False
 
         mu = self._mu()
@@ -336,7 +454,10 @@ class Solution:
             lf = self.lf_lock / (self.lf_lock + self.lf_free)
             accept = q * reward >= (q + (1 - q) * lf) * gap * self.jitter
         else:
-            accept = reward >= gap
+            accept = self._target_accept(reward, n, t, float(your_score))
+            if accept is None:
+                kap = KAPPA_EXP if self.world == "exp" else KAPPA
+                accept = reward > 0 and reward >= kap * gap
 
         if accept:
             self.my_claim = (t, float(your_score), reward)
