@@ -1,0 +1,7 @@
+id,task,name,time,commit,description
+sub-001,1,Mateo 1,2026-11-04T18:33:56,b2f9649,"DP threshold, assumes Exp(mean 10) rewards, lockout fixed from first call"
+sub-002,1,Mateo 2,2026-11-04T18:40:28,da745c6,DP threshold + competitive adjustment: raise threshold 6-12% when behind leader after t=200
+sub-003,1,LEA 1,2026-11-04T18:43:27,073a165,"Pure optimal stopping DP, Exp(mean 10), cutoffs cached per (T, lockout), no competitive adjustment"
+sub-004,2,Mateo 1,2026-11-04T19:06:06,150fe04,"Empirical DP: thresholds learned from observed rewards, recomputed every 20 rounds, cold start 30 rounds"
+sub-005,2,LEA 1,2026-11-04T19:11:00,2cd6daa,"Empirical DP with Normal(-0.2,1) prior pseudo-samples fading over 300 rewards, prior dropped if data disagrees, H_MAX 600"
+sub-006,2,UCL 1,2026-11-04T19:54:40,23a2ad2,Register team UCL with current solution.py
